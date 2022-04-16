@@ -1,0 +1,18 @@
+[package]
+name = "rotten"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[workspace]
+members = ["gl_test"]
+
+[dependencies]
+image = "0.23"
+cgmath = "0.18"
+env_logger = "0.9"
+log = "0.4"
+pollster = "0.2"
+bytemuck = { version = "1.7", features = ["derive"] }
+gl_test = {path = "gl_test"}
