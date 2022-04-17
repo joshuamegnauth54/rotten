@@ -1,3 +1,4 @@
+use crate::shaders::ShaderProgram;
 use glutin::{Context, PossiblyCurrent};
 use std::{
     ffi::{CStr, CString},
@@ -190,15 +191,24 @@ impl DebugType {
 }
 
 //#[derive(Debug)]
-pub struct Gl {
+pub struct Gl<'gl> {
     inner: gl::Gl,
+    shaders: Vec<ShaderProgram<'gl>>,
 }
 
-impl Gl {
+impl<'gl> Gl<'gl> {
     /// Load OpenGL function pointers.
     pub fn load_gl(gl_context: &Context<PossiblyCurrent>) -> Self {
         let inner = gl::Gl::load_with(|ptr| gl_context.get_proc_address(ptr) as *const _);
-        Self { inner }
+        Self {
+            inner,
+            shaders: Default::default(),
+        }
+    }
+
+    /// Insert compiled shaders
+    pub fn insert_shader(&mut self, program: ShaderProgram<'gl>) {
+        self.shaders.push(program)
     }
 
     /// Creates a CString consisting of all whitespace with size len + 1
@@ -250,7 +260,7 @@ impl Gl {
 
 // Implementing Deref for Gl makes it a million times less annoying to use the inner Gl struct.
 // Also...the Nercury tutorial does so too.
-impl Deref for Gl {
+impl Deref for Gl<'_> {
     type Target = gl::Gl;
 
     fn deref(&self) -> &Self::Target {

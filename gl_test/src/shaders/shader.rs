@@ -19,12 +19,16 @@ pub enum ShaderKind {
 
 //#[derive(Debug)]
 pub struct Shader<'gl> {
-    gl: &'gl Gl,
+    gl: &'gl Gl<'gl>,
     id: GLuint,
     kind: ShaderKind,
 }
 
 impl<'gl> Shader<'gl> {
+    pub fn from_file(gl: &'gl Gl) -> Result<Self, GlError> {
+        unimplemented!()
+    }
+
     pub fn from_source(gl: &'gl Gl, source: &CStr, kind: ShaderKind) -> Result<Self, GlError> {
         let id = unsafe { gl.CreateShader(kind as _) };
         unsafe {
@@ -38,7 +42,7 @@ impl<'gl> Shader<'gl> {
         }
 
         if success != gl::FALSE as _ {
-            Ok(Self {gl, id, kind })
+            Ok(Self { gl, id, kind })
         } else {
             let mut len: gl::types::GLint = 0;
             unsafe { gl.GetShaderiv(id, gl::INFO_LOG_LENGTH, &mut len) };
@@ -68,6 +72,8 @@ impl Id for Shader<'_> {
 
 impl Drop for Shader<'_> {
     fn drop(&mut self) {
+        // Does not delete shader if attached to a program.
+        // https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glDeleteShader.xhtml
         unsafe { self.gl.DeleteShader(self.id) }
     }
 }

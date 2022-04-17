@@ -1,3 +1,5 @@
+use std::ffi::CStr;
+
 use crate::{
     gl::{
         self,
@@ -6,16 +8,22 @@ use crate::{
     gl_support::Gl,
     glerror::GlError,
     id::Id,
-    shaders::shader::Shader,
+    label::Label,
+    shaders::shader::{Shader, ShaderKind},
 };
 
 pub struct ShaderProgram<'gl> {
-    gl: &'gl Gl,
+    gl: &'gl Gl<'gl>,
     id: GLuint,
+    label: String,
 }
 
 impl<'gl> ShaderProgram<'gl> {
-    pub fn from_shaders(gl: &'gl Gl, shaders: &[Shader]) -> Result<Self, GlError> {
+    pub fn from_shaders<S: Into<String>>(
+        gl: &'gl Gl,
+        shaders: &[Shader],
+        label: S,
+    ) -> Result<Self, GlError> {
         let program = unsafe { gl.CreateProgram() };
         for shader in shaders {
             unsafe { gl.AttachShader(program, shader.id()) }
@@ -49,8 +57,24 @@ impl<'gl> ShaderProgram<'gl> {
                 unsafe { gl.DetachShader(program, shader.id()) }
             }
 
-            Ok(Self { gl, id: program })
+            Ok(Self {
+                gl,
+                id: program,
+                label: label.into(),
+            })
         }
+    }
+
+    pub fn from_raw<S: Into<String>>(
+        gl: &'gl Gl,
+        raw_shaders: &[(&CStr, ShaderKind)],
+        label: S,
+    ) -> Result<Self, GlError> {
+        let shaders: Vec<_> = raw_shaders
+            .into_iter()
+            .map(|&(source, kind)| Shader::from_source(gl, source, kind))
+            .collect::<Result<_, _>>()?;
+        Ok(ShaderProgram::from_shaders(gl, &shaders, label)?)
     }
 
     pub fn set_used(&self) {
@@ -61,6 +85,12 @@ impl<'gl> ShaderProgram<'gl> {
 impl Id for ShaderProgram<'_> {
     fn id(&self) -> GLuint {
         self.id
+    }
+}
+
+impl Label for ShaderProgram<'_> {
+    fn label(&self) -> &str {
+        &self.label
     }
 }
 

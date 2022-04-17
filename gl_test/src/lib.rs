@@ -6,6 +6,7 @@
 pub(crate) mod gl_support;
 pub(crate) mod glerror;
 pub(crate) mod id;
+pub(crate) mod label;
 pub(crate) mod shaders;
 
 use std::ffi::CString;
@@ -28,18 +29,10 @@ use gl_support::{
 use glerror::GlError;
 use shaders::{Shader, ShaderKind, ShaderProgram};
 
-#[derive(Clone, Copy)]
-struct Viewport {
-    width: GLint,
-    height: GLint,
-}
-
 pub struct GlTest<'gl> {
-    gl: Gl,
+    gl: Gl<'gl>,
     windowed_context: WindowedContext<PossiblyCurrent>,
     event_loop: EventLoop<()>,
-    shaders: Vec<Shader<'gl>>,
-    shader_program: ShaderProgram<'gl>,
 }
 
 impl<'gl> GlTest<'gl> {
@@ -90,14 +83,13 @@ impl<'gl> GlTest<'gl> {
         )?;
 
         let shaders = vec![vert_shader, frag_shader];
-        let shader_program = ShaderProgram::from_shaders(&gl, &shaders)?;
+        let program = ShaderProgram::from_shaders(&gl, &shaders, "Triangle")?;
+        gl.insert_shader(program);
 
         Ok(Self {
             gl,
             windowed_context,
             event_loop: el,
-            shaders,
-            shader_program,
         })
     }
 
@@ -181,8 +173,6 @@ impl<'gl> GlTest<'gl> {
             gl,
             windowed_context,
             event_loop,
-            shaders,
-            shader_program,
         } = self;
 
         // Use Program with compiled shaders
