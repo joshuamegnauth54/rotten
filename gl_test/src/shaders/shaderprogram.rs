@@ -1,11 +1,13 @@
 use std::ffi::CStr;
 
 use crate::{
-    gl::{
-        self,
-        types::{GLint, GLuint},
+    gl_support::{
+        gl::{
+            self,
+            types::{GLint, GLuint},
+        },
+        Gl,
     },
-    gl_support::Gl,
     glerror::GlError,
     id::Id,
     label::Label,

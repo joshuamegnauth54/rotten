@@ -1,5 +1,6 @@
 use crate::shaders::ShaderProgram;
-use glutin::{Context, PossiblyCurrent};
+use gl::types::{GLint, GLsizeiptr, GLuint, GLvoid};
+use glutin::{dpi::PhysicalSize, Context, PossiblyCurrent};
 use std::{
     ffi::{CStr, CString},
     ops::{BitOr, Deref},
@@ -209,6 +210,78 @@ impl<'gl> Gl<'gl> {
     /// Insert compiled shaders
     pub fn insert_shader(&mut self, program: ShaderProgram<'gl>) {
         self.shaders.push(program)
+    }
+
+    pub fn viewport(&self, size: PhysicalSize<u32>) {
+        unsafe {
+            // Viewport = actual viewing area.
+            self.Viewport(0, 0, size.width as _, size.height as _);
+            self.ClearColor(0.5, 0.0, 1.0, 1.0);
+            self.Clear(gl::COLOR_BUFFER_BIT);
+        }
+    }
+
+    pub fn draw(&self) {
+        unsafe {
+            self.ClearColor(0.5, 0.0, 1.0, 1.0);
+            self.DrawArrays(gl::TRIANGLES, 0, 3);
+        }
+    }
+
+    pub fn triangle_vao(&self, vertices: &[f32; 18]) -> GLuint {
+        // Vertex buffer
+        let mut vbo: GLuint = 0;
+        unsafe {
+            // Create one buffer object name.
+            self.GenBuffers(1, &mut vbo);
+            // Bind a buffer to the name in vbo.
+            self.BindBuffer(gl::ARRAY_BUFFER, vbo);
+            // Allocate and copy data.
+            self.BufferData(
+                gl::ARRAY_BUFFER,
+                (std::mem::size_of_val(vertices)) as GLsizeiptr,
+                vertices.as_ptr() as *const GLvoid,
+                gl::STATIC_DRAW,
+            );
+            // Unbind buffer
+            self.BindBuffer(gl::ARRAY_BUFFER, 0);
+        }
+        // Vertex Array Objects store information about VBOs
+        let mut vao: GLuint = 0;
+        unsafe {
+            self.GenVertexArrays(1, &mut vao);
+            // Make vao current
+            self.BindVertexArray(vao);
+            // Rebind vbo because it needs to associated with vao.
+            self.BindBuffer(gl::ARRAY_BUFFER, vbo);
+            // location = 0; vertices
+            self.EnableVertexAttribArray(0);
+            self.VertexAttribPointer(
+                0,
+                3,
+                gl::FLOAT,
+                gl::FALSE,
+                (6 * std::mem::size_of::<f32>()) as GLint,
+                std::ptr::null(),
+            );
+            // location = 1; color information
+            self.EnableVertexAttribArray(1);
+            self.VertexAttribPointer(
+                1,
+                3,
+                gl::FLOAT,
+                gl::FALSE,
+                (6 * std::mem::size_of::<f32>()) as GLint,
+                (3 * std::mem::size_of::<f32>()) as *const GLvoid,
+            );
+        }
+        // Unbind VBO and VAO
+        unsafe {
+            self.BindBuffer(gl::ARRAY_BUFFER, 0);
+            self.BindVertexArray(0);
+        }
+        // Return Vertex Array object
+        vao
     }
 
     /// Creates a CString consisting of all whitespace with size len + 1

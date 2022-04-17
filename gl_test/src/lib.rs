@@ -12,20 +12,14 @@ pub(crate) mod shaders;
 use std::ffi::CString;
 
 use glutin::{
-    dpi::{LogicalSize, PhysicalSize},
+    dpi::{LogicalSize},
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
     ContextBuilder, PossiblyCurrent, WindowedContext,
 };
 
-use gl_support::{
-    gl::{
-        self,
-        types::{GLint, GLsizeiptr, GLuint, GLvoid},
-    },
-    Gl,
-};
+use gl_support::Gl;
 use glerror::GlError;
 use shaders::{Shader, ShaderKind, ShaderProgram};
 
@@ -56,7 +50,7 @@ impl<'gl> GlTest<'gl> {
 
         dbg!(windowed_context.get_pixel_format());
         // Load function pointers.
-        let gl = gl_support::Gl::load_gl(&windowed_context);
+        let gl = Gl::load_gl(&windowed_context);
         // Enable debug printing
         unsafe {
             gl.register_debug_callback();
@@ -93,79 +87,6 @@ impl<'gl> GlTest<'gl> {
         })
     }
 
-    // Have to refactor these into Gl
-    fn viewport(gl: &Gl, size: PhysicalSize<u32>) {
-        unsafe {
-            // Viewport = actual viewing area.
-            gl.Viewport(0, 0, size.width as _, size.height as _);
-            gl.ClearColor(0.5, 0.0, 1.0, 1.0);
-            gl.Clear(gl::COLOR_BUFFER_BIT);
-        }
-    }
-
-    fn draw(gl: &Gl) {
-        unsafe {
-            gl.ClearColor(0.5, 0.0, 1.0, 1.0);
-            gl.DrawArrays(gl::TRIANGLES, 0, 3);
-        }
-    }
-
-    fn triangle_vao(gl: &Gl, vertices: &[f32; 18]) -> GLuint {
-        // Vertex buffer
-        let mut vbo: GLuint = 0;
-        unsafe {
-            // Create one buffer object name.
-            gl.GenBuffers(1, &mut vbo);
-            // Bind a buffer to the name in vbo.
-            gl.BindBuffer(gl::ARRAY_BUFFER, vbo);
-            // Allocate and copy data.
-            gl.BufferData(
-                gl::ARRAY_BUFFER,
-                (std::mem::size_of_val(vertices)) as GLsizeiptr,
-                vertices.as_ptr() as *const GLvoid,
-                gl::STATIC_DRAW,
-            );
-            // Unbind buffer
-            gl.BindBuffer(gl::ARRAY_BUFFER, 0);
-        }
-        // Vertex Array Objects store information about VBOs
-        let mut vao: GLuint = 0;
-        unsafe {
-            gl.GenVertexArrays(1, &mut vao);
-            // Make vao current
-            gl.BindVertexArray(vao);
-            // Rebind vbo because it needs to associated with vao.
-            gl.BindBuffer(gl::ARRAY_BUFFER, vbo);
-            // location = 0; vertices
-            gl.EnableVertexAttribArray(0);
-            gl.VertexAttribPointer(
-                0,
-                3,
-                gl::FLOAT,
-                gl::FALSE,
-                (6 * std::mem::size_of::<f32>()) as GLint,
-                std::ptr::null(),
-            );
-            // location = 1; color information
-            gl.EnableVertexAttribArray(1);
-            gl.VertexAttribPointer(
-                1,
-                3,
-                gl::FLOAT,
-                gl::FALSE,
-                (6 * std::mem::size_of::<f32>()) as GLint,
-                (3 * std::mem::size_of::<f32>()) as *const GLvoid,
-            );
-        }
-        // Unbind VBO and VAO
-        unsafe {
-            gl.BindBuffer(gl::ARRAY_BUFFER, 0);
-            gl.BindVertexArray(0);
-        }
-        // Return Vertex Array object
-        vao
-    }
-
     pub fn run(self) {
         // The event loop takes ownership of self when run is called.
         // I'll figure out a less ugly way to do this later
@@ -175,12 +96,9 @@ impl<'gl> GlTest<'gl> {
             event_loop,
         } = self;
 
-        // Use Program with compiled shaders
-        shader_program.set_used();
-
         // Wayland needs the buffers to be swapped before the event loop or else the window hangs.
         // This might be fixed already since I can't find the issue anymore.
-        GlTest::viewport(&gl, windowed_context.window().inner_size());
+        gl.viewport(windowed_context.window().inner_size());
         windowed_context.swap_buffers().unwrap();
         windowed_context.window().set_visible(true);
 
@@ -189,7 +107,7 @@ impl<'gl> GlTest<'gl> {
         let triangle = vec![-0.5, -0.5, 0.0, 1.0, 0.0, 0.0,
                                     0.5, -0.5, 0.0, 0.0, 1.0, 0.0,
                                     0.0, 0.5, 0.0, 0.0, 0.0, 1.0];
-        let triangle_vao = GlTest::triangle_vao(&gl, &triangle[..18].try_into().unwrap());
+        let triangle_vao = gl.triangle_vao(&triangle[..18].try_into().unwrap());
         shader_program.set_used();
         unsafe {
             gl.BindVertexArray(triangle_vao);
@@ -217,13 +135,13 @@ impl<'gl> GlTest<'gl> {
                     // Resize the GL ViewPort if the window is resized
                     WindowEvent::Resized(size) => {
                         windowed_context.resize(size);
-                        GlTest::viewport(&gl, size)
+                        gl.viewport(size)
                     }
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                     _ => (),
                 },
                 Event::RedrawRequested(_) => {
-                    GlTest::draw(&gl);
+                    gl.draw();
                     windowed_context.swap_buffers().unwrap();
                 }
                 _ => (),
