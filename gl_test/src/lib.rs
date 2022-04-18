@@ -12,7 +12,7 @@ pub(crate) mod shaders;
 use std::ffi::CString;
 
 use glutin::{
-    dpi::{LogicalSize},
+    dpi::LogicalSize,
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
@@ -108,7 +108,7 @@ impl<'gl> GlTest<'gl> {
                                     0.5, -0.5, 0.0, 0.0, 1.0, 0.0,
                                     0.0, 0.5, 0.0, 0.0, 0.0, 1.0];
         let triangle_vao = gl.triangle_vao(&triangle[..18].try_into().unwrap());
-        shader_program.set_used();
+        gl.get_shader("Triangle").unwrap().set_used();
         unsafe {
             gl.BindVertexArray(triangle_vao);
         }

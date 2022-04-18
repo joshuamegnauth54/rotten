@@ -1,4 +1,4 @@
-use std::ffi::CStr;
+use std::{borrow::Cow, ffi::CStr};
 
 use crate::{
     gl_support::{
@@ -17,15 +17,15 @@ use crate::{
 pub struct ShaderProgram<'gl> {
     gl: &'gl Gl<'gl>,
     id: GLuint,
-    label: String,
+    label: Cow<'static, str>,
 }
 
 impl<'gl> ShaderProgram<'gl> {
-    pub fn from_shaders<S: Into<String>>(
-        gl: &'gl Gl,
-        shaders: &[Shader],
-        label: S,
-    ) -> Result<Self, GlError> {
+    pub fn from_shaders<S>(gl: &'gl Gl, shaders: &[Shader], label: S) -> Result<Self, GlError>
+    where
+        S: Into<Cow<'static, str>>,
+    {
+        // Create shader program and attach shaders
         let program = unsafe { gl.CreateProgram() };
         for shader in shaders {
             unsafe { gl.AttachShader(program, shader.id()) }
@@ -67,11 +67,14 @@ impl<'gl> ShaderProgram<'gl> {
         }
     }
 
-    pub fn from_raw<S: Into<String>>(
+    pub fn from_raw<S>(
         gl: &'gl Gl,
         raw_shaders: &[(&CStr, ShaderKind)],
         label: S,
-    ) -> Result<Self, GlError> {
+    ) -> Result<Self, GlError>
+    where
+        S: Into<Cow<'static, str>>,
+    {
         let shaders: Vec<_> = raw_shaders
             .into_iter()
             .map(|&(source, kind)| Shader::from_source(gl, source, kind))

@@ -1,9 +1,10 @@
-use crate::shaders::ShaderProgram;
+use crate::{label::Label, shaders::ShaderProgram};
 use gl::types::{GLint, GLsizeiptr, GLuint, GLvoid};
 use glutin::{dpi::PhysicalSize, Context, PossiblyCurrent};
 use std::{
+    collections::HashMap,
     ffi::{CStr, CString},
-    ops::{BitOr, Deref},
+    ops::{BitOr, Deref}, borrow::Cow,
 };
 
 pub mod gl {
@@ -194,7 +195,7 @@ impl DebugType {
 //#[derive(Debug)]
 pub struct Gl<'gl> {
     inner: gl::Gl,
-    shaders: Vec<ShaderProgram<'gl>>,
+    shaders: HashMap<Cow<'static, str>, ShaderProgram<'gl>>,
 }
 
 impl<'gl> Gl<'gl> {
@@ -209,7 +210,12 @@ impl<'gl> Gl<'gl> {
 
     /// Insert compiled shaders
     pub fn insert_shader(&mut self, program: ShaderProgram<'gl>) {
-        self.shaders.push(program)
+        self.shaders.insert(program.label().into(), program);
+    }
+
+    /// Retrieve shader program by name
+    pub fn get_shader(&self, name: &str) -> Option<&ShaderProgram> {
+        self.shaders.get(name)
     }
 
     pub fn viewport(&self, size: PhysicalSize<u32>) {
