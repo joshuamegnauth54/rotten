@@ -1,10 +1,11 @@
-use crate::{label::Label, shaders::ShaderProgram};
+use crate::{cleanup::Cleanup, label::Label, shaders::ShaderProgram};
 use gl::types::{GLint, GLsizeiptr, GLuint, GLvoid};
 use glutin::{dpi::PhysicalSize, Context, PossiblyCurrent};
 use std::{
+    borrow::Cow,
     collections::HashMap,
     ffi::{CStr, CString},
-    ops::{BitOr, Deref}, borrow::Cow,
+    ops::{BitOr, Deref},
 };
 
 pub mod gl {
@@ -193,12 +194,12 @@ impl DebugType {
 }
 
 //#[derive(Debug)]
-pub struct Gl<'gl> {
+pub struct Gl {
     inner: gl::Gl,
-    shaders: HashMap<Cow<'static, str>, ShaderProgram<'gl>>,
+    shaders: HashMap<Cow<'static, str>, ShaderProgram>,
 }
 
-impl<'gl> Gl<'gl> {
+impl Gl {
     /// Load OpenGL function pointers.
     pub fn load_gl(gl_context: &Context<PossiblyCurrent>) -> Self {
         let inner = gl::Gl::load_with(|ptr| gl_context.get_proc_address(ptr) as *const _);
@@ -209,8 +210,12 @@ impl<'gl> Gl<'gl> {
     }
 
     /// Insert compiled shaders
-    pub fn insert_shader(&mut self, program: ShaderProgram<'gl>) {
-        self.shaders.insert(program.label().into(), program);
+    pub fn insert_shader(&mut self, program: ShaderProgram) -> &ShaderProgram {
+        // I have to get this working without cloning the String so many times
+        let label = program.label().to_owned();
+        self.shaders.insert(Cow::Owned(label.clone()), program);
+
+        self.get_shader(&label).unwrap()
     }
 
     /// Retrieve shader program by name
@@ -339,10 +344,19 @@ impl<'gl> Gl<'gl> {
 
 // Implementing Deref for Gl makes it a million times less annoying to use the inner Gl struct.
 // Also...the Nercury tutorial does so too.
-impl Deref for Gl<'_> {
+impl Deref for Gl {
     type Target = gl::Gl;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+// The renderer owns shaders and vertex buffers to avoid reference counting and lifetime woes.
+impl Drop for Gl {
+    fn drop(&mut self) {
+        self.shaders
+            .iter()
+            .for_each(|(_, value)| value.cleanup(self));
     }
 }

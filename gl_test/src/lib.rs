@@ -3,13 +3,12 @@
 // https://nercury.github.io/rust/opengl/tutorial/2018/02/10/opengl-in-rust-from-scratch-03-compiling-shaders.html
 // https://www.poor.dev/blog/terminal-anatomy/
 
+pub(crate) mod cleanup;
 pub(crate) mod gl_support;
 pub(crate) mod glerror;
 pub(crate) mod id;
 pub(crate) mod label;
 pub(crate) mod shaders;
-
-use std::ffi::CString;
 
 use glutin::{
     dpi::LogicalSize,
@@ -21,15 +20,15 @@ use glutin::{
 
 use gl_support::Gl;
 use glerror::GlError;
-use shaders::{Shader, ShaderKind, ShaderProgram};
+use shaders::{ShaderDescriptor, ShaderFrom, ShaderKind, ShaderProgram};
 
-pub struct GlTest<'gl> {
-    gl: Gl<'gl>,
+pub struct GlTest {
+    gl: Gl,
     windowed_context: WindowedContext<PossiblyCurrent>,
     event_loop: EventLoop<()>,
 }
 
-impl<'gl> GlTest<'gl> {
+impl GlTest {
     pub fn new(width: f32, height: f32) -> Result<Self, GlError> {
         let el = EventLoop::new();
         let wb = WindowBuilder::new()
@@ -50,7 +49,7 @@ impl<'gl> GlTest<'gl> {
 
         dbg!(windowed_context.get_pixel_format());
         // Load function pointers.
-        let gl = Gl::load_gl(&windowed_context);
+        let mut gl = Gl::load_gl(&windowed_context);
         // Enable debug printing
         unsafe {
             gl.register_debug_callback();
@@ -62,23 +61,24 @@ impl<'gl> GlTest<'gl> {
         );
 
         // Load shaders from files
-        let vert_shader = Shader::from_source(
-            &gl,
-            &CString::new(include_str!("../../src/shader_mods/triangle.vert"))
-                .map_err(|_| GlError::Shader("Invalid CString: triangle.vert".to_string()))?,
-            ShaderKind::Vertex,
+        ShaderProgram::from_raw(
+            &mut gl,
+            [
+                ShaderDescriptor {
+                    kind: ShaderKind::Vertex,
+                    from: ShaderFrom::FilePath(
+                        "../../src/shader_mods/triangle.vert".try_into().unwrap(),
+                    ),
+                },
+                ShaderDescriptor {
+                    kind: ShaderKind::Vertex,
+                    from: ShaderFrom::FilePath(
+                        "../../shader_mods/triangle.frag".try_into().unwrap(),
+                    ),
+                },
+            ],
+            "Triangle",
         )?;
-
-        let frag_shader = Shader::from_source(
-            &gl,
-            &CString::new(include_str!("../../src/shader_mods/triangle.frag"))
-                .map_err(|_| GlError::Shader("Invalid CString: triangle.frag".to_string()))?,
-            ShaderKind::Fragment,
-        )?;
-
-        let shaders = vec![vert_shader, frag_shader];
-        let program = ShaderProgram::from_shaders(&gl, &shaders, "Triangle")?;
-        gl.insert_shader(program);
 
         Ok(Self {
             gl,
@@ -108,7 +108,7 @@ impl<'gl> GlTest<'gl> {
                                     0.5, -0.5, 0.0, 0.0, 1.0, 0.0,
                                     0.0, 0.5, 0.0, 0.0, 0.0, 1.0];
         let triangle_vao = gl.triangle_vao(&triangle[..18].try_into().unwrap());
-        gl.get_shader("Triangle").unwrap().set_used();
+        gl.get_shader("Triangle").unwrap().set_used(&gl);
         unsafe {
             gl.BindVertexArray(triangle_vao);
         }

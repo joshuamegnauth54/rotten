@@ -1,6 +1,5 @@
 mod shader;
 mod shaderprogram;
 
-// pub(crate) use crate::{gl_support::gl, glerror};
-pub use shader::{Shader, ShaderKind};
+pub use shader::{Shader, ShaderDescriptor, ShaderFrom, ShaderKind};
 pub use shaderprogram::ShaderProgram;

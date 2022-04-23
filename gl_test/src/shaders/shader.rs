@@ -1,4 +1,4 @@
-use std::ffi::CStr;
+use std::{borrow::Cow, ffi::CString, path::{Path, PathBuf}};
 
 use crate::{
     gl_support::{
@@ -9,28 +9,50 @@ use crate::{
     id::Id,
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum ShaderKind {
     Vertex = gl::VERTEX_SHADER,
     Fragment = gl::FRAGMENT_SHADER,
+    Geometry = gl::GEOMETRY_SHADER,
     Spirv = gl::SHADER_BINARY_FORMAT_SPIR_V,
 }
 
-//#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ShaderFrom {
+    Source(Cow<'static, str>),
+    FilePath(PathBuf),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ShaderDescriptor {
+    pub kind: ShaderKind,
+    pub from: ShaderFrom,
+}
+
 pub struct Shader<'gl> {
-    gl: &'gl Gl<'gl>,
+    gl: &'gl Gl,
     id: GLuint,
     kind: ShaderKind,
 }
 
 impl<'gl> Shader<'gl> {
-    pub fn from_file(gl: &'gl Gl) -> Result<Self, GlError> {
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Cow<'static, str>, GlError> {
         unimplemented!()
     }
 
-    pub fn from_source(gl: &'gl Gl, source: &CStr, kind: ShaderKind) -> Result<Self, GlError> {
-        let id = unsafe { gl.CreateShader(kind as _) };
+    pub fn new(gl: &'gl Gl, descriptor: ShaderDescriptor) -> Result<Self, GlError> {
+        // Load shader source code from file if necessary.
+        let source = match descriptor.from {
+            ShaderFrom::FilePath(path) => Shader::from_file(path)?,
+            ShaderFrom::Source(source) => source,
+        };
+        // Convert source to a CString for FFI
+        let source = CString::new(&*source)
+            .map_err(|_| GlError::Shader("Invalid CString from shader source".to_string()))?;
+
+        // Create shader object and compile source
+        let id = unsafe { gl.CreateShader(descriptor.kind as _) };
         unsafe {
             gl.ShaderSource(id, 1, &source.as_ptr(), std::ptr::null());
             gl.CompileShader(id);
@@ -42,7 +64,11 @@ impl<'gl> Shader<'gl> {
         }
 
         if success != gl::FALSE as _ {
-            Ok(Self { gl, id, kind })
+            Ok(Self {
+                gl,
+                id,
+                kind: descriptor.kind,
+            })
         } else {
             let mut len: gl::types::GLint = 0;
             unsafe { gl.GetShaderiv(id, gl::INFO_LOG_LENGTH, &mut len) };
@@ -72,7 +98,7 @@ impl Id for Shader<'_> {
 
 impl Drop for Shader<'_> {
     fn drop(&mut self) {
-        // Does not delete shader if attached to a program.
+        // Signals that a shader may be deleted but does not delete if attached to a program.
         // https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glDeleteShader.xhtml
         unsafe { self.gl.DeleteShader(self.id) }
     }
