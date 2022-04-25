@@ -66,14 +66,14 @@ impl GlTest {
             [
                 ShaderDescriptor {
                     kind: ShaderKind::Vertex,
-                    from: ShaderFrom::FilePath(
-                        "../../src/shader_mods/triangle.vert".try_into().unwrap(),
+                    from: ShaderFrom::Source(
+                        include_str!("../../src/shader_mods/triangle.vert").into(),
                     ),
                 },
                 ShaderDescriptor {
                     kind: ShaderKind::Vertex,
                     from: ShaderFrom::FilePath(
-                        "../../shader_mods/triangle.frag".try_into().unwrap(),
+                        include_str!("../../src/shader_mods/triangle.frag").into(),
                     ),
                 },
             ],

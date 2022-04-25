@@ -1,4 +1,10 @@
-use std::{borrow::Cow, ffi::CString, path::{Path, PathBuf}};
+use std::{
+    borrow::Cow,
+    ffi::CString,
+    fs::File,
+    io::{BufReader, Read},
+    path::{Path, PathBuf},
+};
 
 use crate::{
     gl_support::{
@@ -37,11 +43,24 @@ pub struct Shader<'gl> {
 }
 
 impl<'gl> Shader<'gl> {
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Cow<'static, str>, GlError> {
-        unimplemented!()
+    /// Helper function to load shader source code
+    fn from_file<P: AsRef<Path>>(path: P) -> Result<Cow<'static, str>, GlError> {
+        let file = File::open(path.as_ref()).map_err(|e| {
+            let error = format!("{e}\nPath: {}", path.as_ref().to_string_lossy());
+            GlError::Shader(error)
+        })?;
+        let mut buf_reader = BufReader::new(file);
+
+        let mut source = String::new();
+        buf_reader
+            .read_to_string(&mut source)
+            .map_err(|e| GlError::Shader(e.to_string()))?;
+
+        Ok(source.into())
     }
 
-    pub fn new(gl: &'gl Gl, descriptor: ShaderDescriptor) -> Result<Self, GlError> {
+    /// Compile a shader from source.
+    pub(super) fn new(gl: &'gl Gl, descriptor: ShaderDescriptor) -> Result<Self, GlError> {
         // Load shader source code from file if necessary.
         let source = match descriptor.from {
             ShaderFrom::FilePath(path) => Shader::from_file(path)?,
@@ -58,6 +77,7 @@ impl<'gl> Shader<'gl> {
             gl.CompileShader(id);
         }
 
+        // Check for compile status errors
         let mut success = gl::TRUE as _;
         unsafe {
             gl.GetShaderiv(id, gl::COMPILE_STATUS, &mut success);
@@ -70,6 +90,7 @@ impl<'gl> Shader<'gl> {
                 kind: descriptor.kind,
             })
         } else {
+            // Retrieve error string from OpenGL if compilation failed
             let mut len: gl::types::GLint = 0;
             unsafe { gl.GetShaderiv(id, gl::INFO_LOG_LENGTH, &mut len) };
             let error = Gl::create_whitespace_cstring(len as usize);

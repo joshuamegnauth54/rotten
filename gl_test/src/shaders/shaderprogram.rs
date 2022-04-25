@@ -1,5 +1,7 @@
 use std::borrow::Cow;
 
+use super::{Shader, ShaderDescriptor};
+
 use crate::{
     cleanup::Cleanup,
     gl_support::{
@@ -12,7 +14,6 @@ use crate::{
     glerror::GlError,
     id::Id,
     label::Label,
-    shaders::shader::{Shader, ShaderDescriptor},
 };
 
 pub struct ShaderProgram {
@@ -55,9 +56,10 @@ impl ShaderProgram {
                     error.as_ptr() as *mut gl::types::GLchar,
                 )
             }
+            // And return the error
             Err(GlError::ShaderProgram(error.to_string_lossy().to_string()))
         } else {
-            // Detach shaders so they may be deleted later.
+            // Detach shaders so they may be deleted later when dropped.
             for shader in shaders {
                 unsafe { gl.DetachShader(program, shader.id()) }
             }
@@ -82,16 +84,18 @@ impl ShaderProgram {
         Ok(gl.insert_shader(program))
     }
 
-    pub fn from_raw<'gl, S, I>(
-        gl: &'gl mut Gl,
+    pub fn from_raw<S, I>(
+        gl: &mut Gl,
         raw_shaders: I,
         label: S,
-    ) -> Result<&'gl Self, GlError>
+    ) -> Result<&Self, GlError>
     where
         S: Into<Cow<'static, str>>,
         I: IntoIterator<Item = ShaderDescriptor>,
     {
         let program = {
+            // Compile all of the shaders from ShaderDescriptors
+            // Shader has Drop implemented so compiled shaders are cleaned up if one of the compilations fail
             let shaders: Vec<_> = raw_shaders
                 .into_iter()
                 .map(|descriptor| Shader::new(gl, descriptor))
