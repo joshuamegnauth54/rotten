@@ -6,6 +6,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use log::{error, info};
+
 use crate::{
     gl_support::{
         gl::{self, types::GLuint},
@@ -45,13 +47,30 @@ pub struct Shader<'gl> {
 impl<'gl> Shader<'gl> {
     /// Helper function to load shader source code
     fn from_file<P: AsRef<Path>>(path: P) -> Result<Cow<'static, str>, GlError> {
-        let file = File::open(path.as_ref()).map_err(|e| {
-            let error = format!("{e}\nPath: {}", path.as_ref().to_string_lossy());
+        let path = path.as_ref();
+        let path_name = path.to_string_lossy();
+        info!("Loading shader from file: {}", path_name);
+
+        // Open source code file.
+        let file = File::open(path).map_err(|e| {
+            let error = format!("{e}\nPath: {}", path_name);
             GlError::Shader(error)
         })?;
+        // Try to create an empty string with the size of the file
+        let mut source = match file.metadata() {
+            Ok(metadata) => String::with_capacity(metadata.len() as _),
+            Err(e) => {
+                error!(
+                    "Failed retrieving file metadata for shader source.\nError: {}",
+                    e
+                );
+                String::new()
+            }
+        };
+        // And make the reader buffered
         let mut buf_reader = BufReader::new(file);
 
-        let mut source = String::new();
+        // Read file to String
         buf_reader
             .read_to_string(&mut source)
             .map_err(|e| GlError::Shader(e.to_string()))?;

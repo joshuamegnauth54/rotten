@@ -1,3 +1,7 @@
+use std::hash::Hash;
+
 pub trait Label {
-    fn label(&self) -> &str;
+    type Output: AsRef<str> + Hash;
+
+    fn label(&self) -> Self::Output;
 }

@@ -71,8 +71,8 @@ impl GlTest {
                     ),
                 },
                 ShaderDescriptor {
-                    kind: ShaderKind::Vertex,
-                    from: ShaderFrom::FilePath(
+                    kind: ShaderKind::Fragment,
+                    from: ShaderFrom::Source(
                         include_str!("../../src/shader_mods/triangle.frag").into(),
                     ),
                 },

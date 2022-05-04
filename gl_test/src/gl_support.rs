@@ -1,11 +1,12 @@
 use crate::{cleanup::Cleanup, label::Label, shaders::ShaderProgram};
 use gl::types::{GLint, GLsizeiptr, GLuint, GLvoid};
 use glutin::{dpi::PhysicalSize, Context, PossiblyCurrent};
+use log::info;
 use std::{
-    borrow::Cow,
     collections::HashMap,
     ffi::{CStr, CString},
     ops::{BitOr, Deref},
+    rc::Rc,
 };
 
 pub mod gl {
@@ -196,7 +197,7 @@ impl DebugType {
 //#[derive(Debug)]
 pub struct Gl {
     inner: gl::Gl,
-    shaders: HashMap<Cow<'static, str>, ShaderProgram>,
+    shaders: HashMap<Rc<str>, ShaderProgram>,
 }
 
 impl Gl {
@@ -211,11 +212,15 @@ impl Gl {
 
     /// Insert compiled shaders
     pub fn insert_shader(&mut self, program: ShaderProgram) -> &ShaderProgram {
-        // I have to get this working without cloning the String so many times
-        let label = program.label().to_owned();
-        self.shaders.insert(Cow::Owned(label.clone()), program);
+        let label = program.label();
+        self.shaders.insert(label.clone(), program);
 
-        self.get_shader(&label).unwrap()
+        self.get_shader(&label).unwrap_or_else(|| {
+            panic!(
+                "Impossible: Shader doesn't exist despite just being added. Label: {}",
+                &label
+            )
+        })
     }
 
     /// Retrieve shader program by name
@@ -338,7 +343,7 @@ impl Gl {
         let type_e: DebugType = type_e.into();
         let severity: DebugSeverity = severity.into();
 
-        println!("[{id}: {severity:?}][{source:?}: {type_e:?}] - {message}")
+        info!("[{id}: {severity:?}][{source:?}: {type_e:?}] - {message}")
     }
 }
 

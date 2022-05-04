@@ -1,7 +1,4 @@
-use std::borrow::Cow;
-
 use super::{Shader, ShaderDescriptor};
-
 use crate::{
     cleanup::Cleanup,
     gl_support::{
@@ -15,17 +12,22 @@ use crate::{
     id::Id,
     label::Label,
 };
+use log::info;
+use std::rc::Rc;
 
 pub struct ShaderProgram {
     id: GLuint,
-    label: Cow<'static, str>,
+    label: Rc<str>,
 }
 
 impl ShaderProgram {
     fn new<S>(gl: &Gl, shaders: &[Shader], label: S) -> Result<Self, GlError>
     where
-        S: Into<Cow<'static, str>>,
+        S: Into<Rc<str>>,
     {
+        let label = label.into();
+        info!("Creating shader program '{}'", label);
+
         // Create shader program and attach shaders
         let program = unsafe { gl.CreateProgram() };
         for shader in shaders {
@@ -64,10 +66,7 @@ impl ShaderProgram {
                 unsafe { gl.DetachShader(program, shader.id()) }
             }
 
-            Ok(Self {
-                id: program,
-                label: label.into(),
-            })
+            Ok(Self { id: program, label })
         }
     }
 
@@ -78,19 +77,15 @@ impl ShaderProgram {
     ) -> Result<&'gl Self, GlError>
     where
         I: IntoIterator<Item = Shader<'gl>>,
-        S: Into<Cow<'static, str>>,
+        S: Into<Rc<str>>,
     {
         let program = ShaderProgram::new(gl, shaders, label)?;
         Ok(gl.insert_shader(program))
     }
 
-    pub fn from_raw<S, I>(
-        gl: &mut Gl,
-        raw_shaders: I,
-        label: S,
-    ) -> Result<&Self, GlError>
+    pub fn from_raw<S, I>(gl: &mut Gl, raw_shaders: I, label: S) -> Result<&Self, GlError>
     where
-        S: Into<Cow<'static, str>>,
+        S: Into<Rc<str>>,
         I: IntoIterator<Item = ShaderDescriptor>,
     {
         let program = {
@@ -117,8 +112,10 @@ impl Id for ShaderProgram {
 }
 
 impl Label for ShaderProgram {
-    fn label(&self) -> &str {
-        &self.label
+    type Output = Rc<str>;
+
+    fn label(&self) -> Self::Output {
+        self.label.clone()
     }
 }
 
