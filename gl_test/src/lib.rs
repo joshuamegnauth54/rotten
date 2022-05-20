@@ -5,9 +5,11 @@
 
 pub(crate) mod cleanup;
 pub(crate) mod gl_support;
+pub(crate) mod glenums;
 pub(crate) mod glerror;
 pub(crate) mod id;
 pub(crate) mod label;
+pub(crate) mod memory;
 pub(crate) mod shaders;
 
 use glutin::{
@@ -20,7 +22,7 @@ use glutin::{
 
 use gl_support::Gl;
 use glerror::GlError;
-use shaders::{ShaderDescriptor, ShaderFrom, ShaderKind, ShaderProgram};
+use shaders::{ShaderDescriptor, ShaderFrom, ShaderKind, ShaderProgram, datatypes::Triangle};
 
 pub struct GlTest {
     gl: Gl,
@@ -103,15 +105,9 @@ impl GlTest {
         windowed_context.window().set_visible(true);
 
         // Draw triangle
-        #[rustfmt::skip]
-        let triangle = vec![-0.5, -0.5, 0.0, 1.0, 0.0, 0.0,
-                                    0.5, -0.5, 0.0, 0.0, 1.0, 0.0,
-                                    0.0, 0.5, 0.0, 0.0, 0.0, 1.0];
-        let triangle_vao = gl.triangle_vao(&triangle[..18].try_into().unwrap());
+        let triangle_vao = gl.triangle_vao();
         gl.get_shader("Triangle").unwrap().set_used(&gl);
-        unsafe {
-            gl.BindVertexArray(triangle_vao);
-        }
+        triangle_vao.bind(&gl);
 
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Wait;

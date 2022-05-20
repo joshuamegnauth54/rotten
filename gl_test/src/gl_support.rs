@@ -1,4 +1,10 @@
-use crate::{cleanup::Cleanup, label::Label, shaders::ShaderProgram};
+use crate::{
+    cleanup::Cleanup,
+    glenums::{BufferTarget, BufferUsage},
+    label::Label,
+    memory::{ClassicBuffer, ClassicVao, GpuData},
+    shaders::{datatypes::Triangle, ShaderProgram},
+};
 use gl::types::{GLint, GLsizeiptr, GLuint, GLvoid};
 use glutin::{dpi::PhysicalSize, Context, PossiblyCurrent};
 use log::info;
@@ -244,60 +250,12 @@ impl Gl {
         }
     }
 
-    pub fn triangle_vao(&self, vertices: &[f32; 18]) -> GLuint {
-        // Vertex buffer
-        let mut vbo: GLuint = 0;
-        unsafe {
-            // Create one buffer object name.
-            self.GenBuffers(1, &mut vbo);
-            // Bind a buffer to the name in vbo.
-            self.BindBuffer(gl::ARRAY_BUFFER, vbo);
-            // Allocate and copy data.
-            self.BufferData(
-                gl::ARRAY_BUFFER,
-                (std::mem::size_of_val(vertices)) as GLsizeiptr,
-                vertices.as_ptr() as *const GLvoid,
-                gl::STATIC_DRAW,
-            );
-            // Unbind buffer
-            self.BindBuffer(gl::ARRAY_BUFFER, 0);
-        }
-        // Vertex Array Objects store information about VBOs
-        let mut vao: GLuint = 0;
-        unsafe {
-            self.GenVertexArrays(1, &mut vao);
-            // Make vao current
-            self.BindVertexArray(vao);
-            // Rebind vbo because it needs to associated with vao.
-            self.BindBuffer(gl::ARRAY_BUFFER, vbo);
-            // location = 0; vertices
-            self.EnableVertexAttribArray(0);
-            self.VertexAttribPointer(
-                0,
-                3,
-                gl::FLOAT,
-                gl::FALSE,
-                (6 * std::mem::size_of::<f32>()) as GLint,
-                std::ptr::null(),
-            );
-            // location = 1; color information
-            self.EnableVertexAttribArray(1);
-            self.VertexAttribPointer(
-                1,
-                3,
-                gl::FLOAT,
-                gl::FALSE,
-                (6 * std::mem::size_of::<f32>()) as GLint,
-                (3 * std::mem::size_of::<f32>()) as *const GLvoid,
-            );
-        }
-        // Unbind VBO and VAO
-        unsafe {
-            self.BindBuffer(gl::ARRAY_BUFFER, 0);
-            self.BindVertexArray(0);
-        }
-        // Return Vertex Array object
-        vao
+    pub fn triangle_vao(&self) -> ClassicVao {
+        let triangle = Triangle::default();
+        let vbo = ClassicBuffer::new(self, BufferTarget::Array, "TriangleVerts");
+        vbo.write(self, &triangle, BufferUsage::StaticDraw);
+
+        ClassicVao::new(self, vbo, &triangle.memory_layout(), "Triangle")
     }
 
     /// Creates a CString consisting of all whitespace with size len + 1
