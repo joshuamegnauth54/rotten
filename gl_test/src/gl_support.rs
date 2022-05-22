@@ -1,11 +1,9 @@
 use crate::{
-    cleanup::Cleanup,
     glenums::{BufferTarget, BufferUsage},
     label::Label,
     memory::{ClassicBuffer, ClassicVao, GpuData},
     shaders::{datatypes::Triangle, ShaderProgram},
 };
-use gl::types::{GLint, GLsizeiptr, GLuint, GLvoid};
 use glutin::{dpi::PhysicalSize, Context, PossiblyCurrent};
 use log::info;
 use std::{
@@ -200,24 +198,25 @@ impl DebugType {
     }
 }
 
-//#[derive(Debug)]
+#[derive(Clone)]
 pub struct Gl {
-    inner: gl::Gl,
-    shaders: HashMap<Rc<str>, ShaderProgram>,
+    context: gl::Gl,
+    //shaders: HashMap<Rc<str>, ShaderProgram>,
 }
 
 impl Gl {
     /// Load OpenGL function pointers.
-    pub fn load_gl(gl_context: &Context<PossiblyCurrent>) -> Self {
-        let inner = gl::Gl::load_with(|ptr| gl_context.get_proc_address(ptr) as *const _);
+    pub fn load_gl(gl_context: &Context<PossiblyCurrent>) -> Rc<Self> {
+        let context = gl::Gl::load_with(|ptr| gl_context.get_proc_address(ptr) as *const _);
         Self {
-            inner,
-            shaders: Default::default(),
+            context,
+            //shaders: Default::default(),
         }
+        .into()
     }
 
     /// Insert compiled shaders
-    pub fn insert_shader(&mut self, program: ShaderProgram) -> &ShaderProgram {
+    /*pub fn insert_shader(&mut self, program: ShaderProgram) -> &ShaderProgram {
         let label = program.label();
         self.shaders.insert(label.clone(), program);
 
@@ -232,7 +231,7 @@ impl Gl {
     /// Retrieve shader program by name
     pub fn get_shader(&self, name: &str) -> Option<&ShaderProgram> {
         self.shaders.get(name)
-    }
+    }*/
 
     pub fn viewport(&self, size: PhysicalSize<u32>) {
         unsafe {
@@ -250,12 +249,12 @@ impl Gl {
         }
     }
 
-    pub fn triangle_vao(&self) -> ClassicVao {
+    pub fn triangle_vao(self: &Rc<Self>) -> ClassicVao {
         let triangle = Triangle::default();
-        let vbo = ClassicBuffer::new(self, BufferTarget::Array, "TriangleVerts");
-        vbo.write(self, &triangle, BufferUsage::StaticDraw);
+        let vbo = ClassicBuffer::new(self.clone(), BufferTarget::Array, "TriangleVerts");
+        vbo.write(&triangle, BufferUsage::StaticDraw);
 
-        ClassicVao::new(self, vbo, &triangle.memory_layout(), "Triangle")
+        ClassicVao::new(self.clone(), vbo, &triangle.memory_layout(), "Triangle")
     }
 
     /// Creates a CString consisting of all whitespace with size len + 1
@@ -311,15 +310,6 @@ impl Deref for Gl {
     type Target = gl::Gl;
 
     fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-// The renderer owns shaders and vertex buffers to avoid reference counting and lifetime woes.
-impl Drop for Gl {
-    fn drop(&mut self) {
-        self.shaders
-            .iter()
-            .for_each(|(_, value)| value.cleanup(self));
+        &self.context
     }
 }

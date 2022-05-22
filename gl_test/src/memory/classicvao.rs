@@ -1,5 +1,4 @@
 use crate::{
-    cleanup::Cleanup,
     gl_support::{
         gl::{
             self,
@@ -16,22 +15,23 @@ use log::error;
 use std::rc::Rc;
 
 /// Vertex Array objects store metadata on vertex buffers
-#[derive(Debug)]
+//#[derive(Debug)]
 pub struct ClassicVao {
+    gl: Rc<Gl>,
     id: GLuint,
     vbo: ClassicBuffer,
     label: Rc<str>,
 }
 
 impl ClassicVao {
-    pub fn new<S>(gl: &Gl, mut vbo: ClassicBuffer, layouts: &[Layout], label: S) -> Self
+    pub fn new<S>(gl: Rc<Gl>, mut vbo: ClassicBuffer, layouts: &[Layout], label: S) -> Self
     where
         S: Into<Rc<str>>,
     {
         // Bind the current buffer to the ARRAY_BUFFER target.
         // Note: VBO may be bound at any time before VertexAttribPointer since that's the function
         // that reads the global state.
-        vbo.rebind(gl, BufferTarget::Array);
+        vbo.rebind(BufferTarget::Array);
 
         // Create a single Vertex Array object.
         let mut id = 0;
@@ -66,22 +66,21 @@ impl ClassicVao {
         }
 
         let label = label.into();
-        Self { id, vbo, label }
+        Self { gl, id, vbo, label }
     }
 
-    pub fn bind(&self, gl: &Gl) {
-        unsafe { gl.BindVertexArray(self.id) }
+    pub fn bind(&self) {
+        unsafe { self.gl.BindVertexArray(self.id) }
     }
 
-    pub fn unbind(gl: &Gl) {
+    pub fn unbind(gl: &Rc<Gl>) {
         unsafe { gl.BindVertexArray(0) }
     }
 }
 
-impl Cleanup for ClassicVao {
-    fn cleanup(&self, gl: &Gl) {
-        self.vbo.cleanup(gl);
-        unsafe { gl.DeleteVertexArrays(1, &self.id) }
+impl Drop for ClassicVao {
+    fn drop(&mut self) {
+        unsafe { self.gl.DeleteVertexArrays(1, &self.id) }
     }
 }
 

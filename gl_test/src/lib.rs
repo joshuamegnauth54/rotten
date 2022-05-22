@@ -3,11 +3,9 @@
 // https://nercury.github.io/rust/opengl/tutorial/2018/02/10/opengl-in-rust-from-scratch-03-compiling-shaders.html
 // https://www.poor.dev/blog/terminal-anatomy/
 
-pub(crate) mod cleanup;
 pub(crate) mod gl_support;
 pub(crate) mod glenums;
 pub(crate) mod glerror;
-pub(crate) mod id;
 pub(crate) mod label;
 pub(crate) mod memory;
 pub(crate) mod shaders;
@@ -22,10 +20,13 @@ use glutin::{
 
 use gl_support::Gl;
 use glerror::GlError;
-use shaders::{ShaderDescriptor, ShaderFrom, ShaderKind, ShaderProgram, datatypes::Triangle};
+use log::info;
+use shaders::{ShaderDescriptor, ShaderFrom, ShaderKind, ShaderProgram};
+use std::rc::Rc;
 
 pub struct GlTest {
-    gl: Gl,
+    gl: Rc<Gl>,
+    triangle_shader: ShaderProgram,
     windowed_context: WindowedContext<PossiblyCurrent>,
     event_loop: EventLoop<()>,
 }
@@ -49,7 +50,7 @@ impl GlTest {
                 .expect("Failed to make new OpenGL context current.")
         };
 
-        dbg!(windowed_context.get_pixel_format());
+        info!("{:?}", windowed_context.get_pixel_format());
         // Load function pointers.
         let mut gl = Gl::load_gl(&windowed_context);
         // Enable debug printing
@@ -63,8 +64,8 @@ impl GlTest {
         );
 
         // Load shaders from files
-        ShaderProgram::from_raw(
-            &mut gl,
+        let triangle_shader = ShaderProgram::from_raw(
+            gl.clone(),
             [
                 ShaderDescriptor {
                     kind: ShaderKind::Vertex,
@@ -84,6 +85,7 @@ impl GlTest {
 
         Ok(Self {
             gl,
+            triangle_shader,
             windowed_context,
             event_loop: el,
         })
@@ -94,6 +96,7 @@ impl GlTest {
         // I'll figure out a less ugly way to do this later
         let Self {
             gl,
+            triangle_shader,
             windowed_context,
             event_loop,
         } = self;
@@ -106,8 +109,8 @@ impl GlTest {
 
         // Draw triangle
         let triangle_vao = gl.triangle_vao();
-        gl.get_shader("Triangle").unwrap().set_used(&gl);
-        triangle_vao.bind(&gl);
+        triangle_shader.set_used();
+        triangle_vao.bind();
 
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Wait;

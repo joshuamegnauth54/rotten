@@ -1,6 +1,5 @@
 use super::{Shader, ShaderDescriptor};
 use crate::{
-    cleanup::Cleanup,
     gl_support::{
         gl::{
             self,
@@ -9,28 +8,39 @@ use crate::{
         Gl,
     },
     glerror::GlError,
-    id::Id,
     label::Label,
 };
-use log::info;
+use log::{error, info};
 use std::rc::Rc;
 
 pub struct ShaderProgram {
+    gl: Rc<Gl>,
     id: GLuint,
     label: Rc<str>,
 }
 
 impl ShaderProgram {
-    fn new<S>(gl: &Gl, shaders: &[Shader], label: S) -> Result<Self, GlError>
+    fn new<S>(gl: Rc<Gl>, shaders: &[Shader], label: S) -> Result<Self, GlError>
     where
         S: Into<Rc<str>>,
     {
         let label = label.into();
         info!("Creating shader program '{}'", label);
 
-        // Create shader program and attach shaders
+        // Create shader program
         let program = unsafe { gl.CreateProgram() };
+
+        // CreateProgram returns 0 on errors, but errors only occur if something is really broken (like a Context error).
+        if program == 0 {
+            error!("CreateProgram failed to generate an object id");
+            Err(GlError::ShaderProgram(
+                "CreateProgram returned an object id of 0".into(),
+            ))?
+        }
+
+        // Attach each shader to program
         for shader in shaders {
+            info!("Attaching {} shader", shader.kind());
             unsafe { gl.AttachShader(program, shader.id()) }
         }
 
@@ -66,24 +76,22 @@ impl ShaderProgram {
                 unsafe { gl.DetachShader(program, shader.id()) }
             }
 
-            Ok(Self { id: program, label })
+            Ok(Self {
+                gl,
+                id: program,
+                label,
+            })
         }
     }
 
-    pub fn from_shaders<'gl, I, S>(
-        gl: &'gl mut Gl,
-        shaders: &[Shader],
-        label: S,
-    ) -> Result<&'gl Self, GlError>
+    pub fn from_shaders<S>(gl: Rc<Gl>, shaders: &[Shader], label: S) -> Result<Self, GlError>
     where
-        I: IntoIterator<Item = Shader<'gl>>,
         S: Into<Rc<str>>,
     {
-        let program = ShaderProgram::new(gl, shaders, label)?;
-        Ok(gl.insert_shader(program))
+        ShaderProgram::new(gl, shaders, label)
     }
 
-    pub fn from_raw<S, I>(gl: &mut Gl, raw_shaders: I, label: S) -> Result<&Self, GlError>
+    pub fn from_raw<S, I>(gl: Rc<Gl>, raw_shaders: I, label: S) -> Result<Self, GlError>
     where
         S: Into<Rc<str>>,
         I: IntoIterator<Item = ShaderDescriptor>,
@@ -93,21 +101,15 @@ impl ShaderProgram {
             // Shader has Drop implemented so compiled shaders are cleaned up if one of the compilations fail
             let shaders: Vec<_> = raw_shaders
                 .into_iter()
-                .map(|descriptor| Shader::new(gl, descriptor))
+                .map(|descriptor| Shader::new(gl.clone(), descriptor))
                 .collect::<Result<_, _>>()?;
             ShaderProgram::new(gl, &shaders, label)?
         };
-        Ok(gl.insert_shader(program))
+        Ok(program)
     }
 
-    pub fn set_used(&self, gl: &Gl) {
-        unsafe { gl.UseProgram(self.id) }
-    }
-}
-
-impl Id for ShaderProgram {
-    fn id(&self) -> GLuint {
-        self.id
+    pub fn set_used(&self) {
+        unsafe { self.gl.UseProgram(self.id) }
     }
 }
 
@@ -119,8 +121,8 @@ impl Label for ShaderProgram {
     }
 }
 
-impl Cleanup for ShaderProgram {
-    fn cleanup(&self, gl: &Gl) {
-        unsafe { gl.DeleteProgram(self.id()) }
+impl Drop for ShaderProgram {
+    fn drop(&mut self) {
+        unsafe { self.gl.DeleteProgram(self.id) }
     }
 }

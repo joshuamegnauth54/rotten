@@ -1,9 +1,11 @@
 use std::{
     borrow::Cow,
     ffi::CString,
+    fmt,
     fs::File,
     io::{BufReader, Read},
     path::{Path, PathBuf},
+    rc::Rc,
 };
 
 use log::{error, info};
@@ -14,7 +16,6 @@ use crate::{
         Gl,
     },
     glerror::GlError,
-    id::Id,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -24,6 +25,18 @@ pub enum ShaderKind {
     Fragment = gl::FRAGMENT_SHADER,
     Geometry = gl::GEOMETRY_SHADER,
     Spirv = gl::SHADER_BINARY_FORMAT_SPIR_V,
+}
+
+impl fmt::Display for ShaderKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use ShaderKind::*;
+        match *self {
+            Vertex => write!(f, "Vertex"),
+            Fragment => write!(f, "Fragment"),
+            Geometry => write!(f, "Geometry"),
+            Spirv => write!(f, "SPIR-V"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -38,13 +51,13 @@ pub struct ShaderDescriptor {
     pub from: ShaderFrom,
 }
 
-pub struct Shader<'gl> {
-    gl: &'gl Gl,
+pub struct Shader {
+    gl: Rc<Gl>,
     id: GLuint,
     kind: ShaderKind,
 }
 
-impl<'gl> Shader<'gl> {
+impl Shader {
     /// Helper function to load shader source code
     fn from_file<P: AsRef<Path>>(path: P) -> Result<Cow<'static, str>, GlError> {
         let path = path.as_ref();
@@ -79,7 +92,7 @@ impl<'gl> Shader<'gl> {
     }
 
     /// Compile a shader from source.
-    pub(super) fn new(gl: &'gl Gl, descriptor: ShaderDescriptor) -> Result<Self, GlError> {
+    pub(super) fn new(gl: Rc<Gl>, descriptor: ShaderDescriptor) -> Result<Self, GlError> {
         // Load shader source code from file if necessary.
         let source = match descriptor.from {
             ShaderFrom::FilePath(path) => Shader::from_file(path)?,
@@ -91,7 +104,19 @@ impl<'gl> Shader<'gl> {
 
         // Create shader object and compile source
         let id = unsafe { gl.CreateShader(descriptor.kind as _) };
+        if id == 0 {
+            error!("CreateShader failed to generate an object id");
+            return Err(GlError::Shader(
+                "CreateShader returned an object id of 0".into(),
+            ));
+        }
+
+        // Compile sauce
         unsafe {
+            // Copy shader source to object referenced by id.
+            // Dropping the CString that stores the source is entirely safe.
+            // Length: ShaderSource doesn't need the actual length because CStrings are null terminated.
+            // https://docs.gl/gl4/glShaderSource
             gl.ShaderSource(id, 1, &source.as_ptr(), std::ptr::null());
             gl.CompileShader(id);
         }
@@ -125,20 +150,22 @@ impl<'gl> Shader<'gl> {
         }
     }
 
+    /// Return OpenGL object id.
+    pub(super) fn id(&self) -> GLuint {
+        // This function is mostly for [ShaderProgram] so I don't have to make the struct member pub(super)
+        self.id
+    }
+
+    /// Type of shader
     pub fn kind(&self) -> ShaderKind {
         self.kind
     }
 }
 
-impl Id for Shader<'_> {
-    fn id(&self) -> GLuint {
-        self.id
-    }
-}
-
-impl Drop for Shader<'_> {
+impl Drop for Shader {
     fn drop(&mut self) {
         // Signals that a shader may be deleted but does not delete if attached to a program.
+        // Shaders do not need to stay attached to a program after linking.
         // https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glDeleteShader.xhtml
         unsafe { self.gl.DeleteShader(self.id) }
     }
