@@ -1,6 +1,6 @@
 #![allow(non_upper_case_globals)]
 
-use crate::gl_support::gl::{self, types::GLenum};
+use crate::context::gl::{self, types::GLenum};
 use bitflags::bitflags;
 
 bitflags! {

@@ -11,7 +11,7 @@ use std::{
 use log::{error, info};
 
 use crate::{
-    gl_support::{
+    context::{
         gl::{self, types::GLuint},
         Gl,
     },
@@ -41,7 +41,9 @@ impl fmt::Display for ShaderKind {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ShaderFrom {
+    // Shader source code
     Source(Cow<'static, str>),
+    // File containing shader source
     FilePath(PathBuf),
 }
 

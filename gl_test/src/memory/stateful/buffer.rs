@@ -1,9 +1,10 @@
 use crate::{
-    gl_support::{
+    context::{
         gl::types::{GLsizeiptr, GLuint, GLvoid},
         Gl,
     },
     glenums::{BufferTarget, BufferUsage},
+    glerror::GlError,
     label::Label,
     memory::GpuData,
 };
@@ -22,7 +23,7 @@ pub struct ClassicBuffer {
 
 impl ClassicBuffer {
     /// Allocate a new GPU buffer with `BufferTarget` as the target.
-    pub fn new<S>(gl: Rc<Gl>, target: BufferTarget, label: S) -> Self
+    pub fn new<S>(gl: Rc<Gl>, target: BufferTarget, label: S) -> Result<Self, GlError>
     where
         S: Into<Rc<str>>,
     {
@@ -34,17 +35,19 @@ impl ClassicBuffer {
         }
 
         // GenBuffers shouldn't return an id of 0, so I'll just check this in debug only
-        #[cfg(debug_assertions)]
         if id == 0 {
-            error!("GenBuffers failed to reserve a buffer name.\nObject id = 0 for {target:?}");
-        }
-
-        let label = label.into();
-        Self {
-            gl,
-            id,
-            target,
-            label,
+            error!("GenBuffers did not reserve a buffer name. Possible context error?");
+            Err(GlError::Buffer(format!(
+                "GenBuffers failed to reserve a buffer name.\nObject id = 0 for {target:?}"
+            )))
+        } else {
+            let label = label.into();
+            Ok(Self {
+                gl,
+                id,
+                target,
+                label,
+            })
         }
     }
 
@@ -75,9 +78,9 @@ impl ClassicBuffer {
     }
 
     /// Copy data into buffer.
-    pub fn write<D, const N: usize>(&self, data: &D, usage: BufferUsage)
+    pub fn write<D>(&self, data: &D, usage: BufferUsage)
     where
-        D: GpuData<N>,
+        D: GpuData,
     {
         // Bind current buffer to copy the data to the appropriate object
         self.bind();

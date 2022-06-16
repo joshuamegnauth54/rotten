@@ -1,4 +1,4 @@
-use crate::memory::{GpuData, Layout};
+use crate::memory::{GpuData, GpuDataVerts, Layout};
 use std::mem::size_of;
 
 /// Colored vertex.
@@ -42,21 +42,23 @@ impl<const P: usize, const C: usize> Vertex<P, C> {
     }*/
 }
 
-impl<const P: usize, const C: usize> GpuData<2> for Vertex<P, C> {
+impl<const P: usize, const C: usize> GpuData for Vertex<P, C> {
     type Data = f32;
 
     fn as_ptr(&self) -> *const Self::Data {
         std::ptr::addr_of!(*self) as _
     }
 
+    fn size_total(&self) -> usize {
+        self.stride()
+    }
+}
+
+impl<const P: usize, const C: usize> GpuDataVerts<2> for Vertex<P, C> {
     /// Stride value of all components
     #[inline]
     fn stride(&self) -> usize {
         size_of::<f32>() * (P + C)
-    }
-
-    fn size_total(&self) -> usize {
-        self.stride()
     }
 
     fn memory_layout(&self) -> [Layout; 2] {

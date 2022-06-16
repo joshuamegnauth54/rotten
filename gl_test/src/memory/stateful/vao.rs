@@ -1,5 +1,5 @@
 use crate::{
-    gl_support::{
+    context::{
         gl::{
             self,
             types::{GLint, GLuint, GLvoid},
@@ -7,8 +7,9 @@ use crate::{
         Gl,
     },
     glenums::BufferTarget,
+    glerror::GlError,
     label::Label,
-    memory::{ClassicBuffer, Layout},
+    memory::{stateful::Buffer, Layout},
 };
 
 use log::error;
@@ -16,15 +17,22 @@ use std::rc::Rc;
 
 /// Vertex Array objects store metadata on vertex buffers
 //#[derive(Debug)]
-pub struct ClassicVao {
+pub struct VertexArray {
     gl: Rc<Gl>,
     id: GLuint,
-    vbo: ClassicBuffer,
+    vbo: Buffer,
+    ebo: Option<Buffer>,
     label: Rc<str>,
 }
 
-impl ClassicVao {
-    pub fn new<S>(gl: Rc<Gl>, mut vbo: ClassicBuffer, layouts: &[Layout], label: S) -> Self
+impl VertexArray {
+    pub fn new<S>(
+        gl: Rc<Gl>,
+        mut vbo: Buffer,
+        ebo: Option<Buffer>,
+        layouts: &[Layout],
+        label: S,
+    ) -> Result<Self, GlError>
     where
         S: Into<Rc<str>>,
     {
@@ -42,10 +50,17 @@ impl ClassicVao {
             gl.BindVertexArray(id);
         }
 
-        // Only checking this in debug because it shouldn't happen.
-        #[cfg(debug_assertions)]
+        // An id of 0 only occurs if the context is borked.
         if id == 0 {
             error!("GenVertexArrays did not create a vertex array.");
+            return Err(GlError::Buffer(
+                "GenVertexArrays returned a vertex array object id of 0.".into(),
+            ));
+        }
+
+        // Not sure, but I think the element buffer should be bound after the VAO.
+        if let Some(ebo) = ebo.as_ref() {
+            ebo.bind();
         }
 
         // Associate memory layout with VAO
@@ -65,11 +80,34 @@ impl ClassicVao {
             }
         }
 
+        // Vertex arrays need to be unbound before the EBO (and VBO?) or else the unbind call is
+        // saved to the VAO.
+        unsafe { gl.BindVertexArray(0) }
+        if let Some(ebo) = ebo.as_ref() {
+            ebo.unbind()
+        }
+        vbo.unbind();
+
         let label = label.into();
-        Self { gl, id, vbo, label }
+        Ok(Self {
+            gl,
+            id,
+            vbo,
+            ebo,
+            label,
+        })
+    }
+
+    pub fn vertex_buffer(&self) -> &Buffer {
+        &self.vbo
+    }
+
+    pub fn element_buffer(&self) -> Option<&Buffer> {
+        self.ebo.as_ref()
     }
 
     pub fn bind(&self) {
+        // The buffers referenced by the VAO do not need to be bound too.
         unsafe { self.gl.BindVertexArray(self.id) }
     }
 
@@ -78,13 +116,13 @@ impl ClassicVao {
     }
 }
 
-impl Drop for ClassicVao {
+impl Drop for VertexArray {
     fn drop(&mut self) {
         unsafe { self.gl.DeleteVertexArrays(1, &self.id) }
     }
 }
 
-impl Label for ClassicVao {
+impl Label for VertexArray {
     type Output = Rc<str>;
 
     fn label(&self) -> Self::Output {

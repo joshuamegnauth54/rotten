@@ -3,13 +3,15 @@
 // https://nercury.github.io/rust/opengl/tutorial/2018/02/10/opengl-in-rust-from-scratch-03-compiling-shaders.html
 // https://www.poor.dev/blog/terminal-anatomy/
 
-pub(crate) mod gl_support;
+pub(crate) mod context;
 pub(crate) mod glenums;
 pub(crate) mod glerror;
 pub(crate) mod label;
 pub(crate) mod memory;
+pub(crate) mod resources;
 pub(crate) mod shaders;
 
+use glenums::{ClearKind, DrawMode};
 use glutin::{
     dpi::LogicalSize,
     event::{Event, WindowEvent},
@@ -18,15 +20,22 @@ use glutin::{
     ContextBuilder, PossiblyCurrent, WindowedContext,
 };
 
-use gl_support::Gl;
+use context::{Gl, Size};
 use glerror::GlError;
 use log::info;
-use shaders::{ShaderDescriptor, ShaderFrom, ShaderKind, ShaderProgram};
+use resources::programs::{
+    rectangle::Rectangle,
+    triangle::{TriangleBuf, TriangleShader},
+};
 use std::rc::Rc;
+
+use crate::context::{info::ContextInfo, Clear, Color};
 
 pub struct GlTest {
     gl: Rc<Gl>,
-    triangle_shader: ShaderProgram,
+    triangle_prog: TriangleShader,
+    trianglebuf: TriangleBuf,
+    rectanglebuf: Rectangle,
     windowed_context: WindowedContext<PossiblyCurrent>,
     event_loop: EventLoop<()>,
 }
@@ -52,40 +61,45 @@ impl GlTest {
 
         info!("{:?}", windowed_context.get_pixel_format());
         // Load function pointers.
-        let mut gl = Gl::load_gl(&windowed_context);
+        let gl = Gl::load_gl(|addr| windowed_context.get_proc_address(addr));
         // Enable debug printing
-        unsafe {
-            gl.register_debug_callback();
-        }
+        gl.enable_debug_output();
         gl.debug_message_control(
-            gl_support::DebugSource::DontCare,
-            gl_support::DebugType::DontCare,
-            gl_support::DebugSeverity::DontCare,
+            glenums::DebugSource::DontCare,
+            glenums::DebugType::DontCare,
+            glenums::DebugSeverity::DontCare,
+            true,
         );
 
-        // Load shaders from files
-        let triangle_shader = ShaderProgram::from_raw(
-            gl.clone(),
-            [
-                ShaderDescriptor {
-                    kind: ShaderKind::Vertex,
-                    from: ShaderFrom::Source(
-                        include_str!("../../src/shader_mods/triangle.vert").into(),
-                    ),
-                },
-                ShaderDescriptor {
-                    kind: ShaderKind::Fragment,
-                    from: ShaderFrom::Source(
-                        include_str!("../../src/shader_mods/triangle.frag").into(),
-                    ),
-                },
-            ],
-            "Triangle",
-        )?;
+        // Print information on the OpenGL context.
+        let context_info = ContextInfo::new(&gl);
+        info!("{}", context_info.version);
+        info!("Vendor: {}", context_info.vendor);
+        info!("GPU: {}", context_info.renderer);
+        info!("GLSL version: {}", context_info.glsl);
+
+        // Load shaders from files and construct buffers
+        let triangle_prog = TriangleShader::new(gl.clone())?;
+        let trianglebuf = TriangleBuf::new(gl.clone())?;
+        let rectanglebuf = Rectangle::new(gl.clone())?;
+
+        // Set a base clear color
+        let clear = Clear {
+            color: Some(Color {
+                red: 220. / 255.,
+                green: 205. / 255.,
+                blue: 1.0,
+                alpha: 1.0,
+            }),
+            ..Default::default()
+        };
+        clear.set(&gl);
 
         Ok(Self {
             gl,
-            triangle_shader,
+            triangle_prog,
+            trianglebuf,
+            rectanglebuf,
             windowed_context,
             event_loop: el,
         })
@@ -96,21 +110,22 @@ impl GlTest {
         // I'll figure out a less ugly way to do this later
         let Self {
             gl,
-            triangle_shader,
+            triangle_prog,
+            trianglebuf,
+            rectanglebuf,
             windowed_context,
             event_loop,
         } = self;
 
-        // Wayland needs the buffers to be swapped before the event loop or else the window hangs.
-        // This might be fixed already since I can't find the issue anymore.
-        gl.viewport(windowed_context.window().inner_size());
+        // Clear on start so the window has something to display.
+        gl.clear(ClearKind::ColorBuffer);
+        gl.viewport(context::Rect {
+            size: gl.viewport_max(),
+            ..Default::default()
+        });
         windowed_context.swap_buffers().unwrap();
-        windowed_context.window().set_visible(true);
-
-        // Draw triangle
-        let triangle_vao = gl.triangle_vao();
-        triangle_shader.set_used();
-        triangle_vao.bind();
+        // Default shader at the moment
+        triangle_prog.shader.set_used();
 
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Wait;
@@ -125,22 +140,35 @@ impl GlTest {
                             .expect("Virtual keycode is empty despite is_some()")
                         {
                             glutin::event::VirtualKeyCode::A => {
-                                println!("A pressed")
+                                gl.clear(ClearKind::ColorBuffer);
+                                trianglebuf.vao.bind();
+                                gl.draw_elements(DrawMode::Triangles, 3, 0);
+                                windowed_context.window().request_redraw()
                             }
-                            glutin::event::VirtualKeyCode::B => println!("B pressed"),
+                            glutin::event::VirtualKeyCode::B => {
+                                gl.clear(ClearKind::ColorBuffer);
+                                rectanglebuf.vao.bind();
+                                gl.draw_elements(DrawMode::Triangles, 6, 0);
+                                windowed_context.window().request_redraw()
+                            }
                             _ => (),
                         }
                     }
                     // Resize the GL ViewPort if the window is resized
                     WindowEvent::Resized(size) => {
                         windowed_context.resize(size);
-                        gl.viewport(size)
+                        gl.viewport(context::Rect {
+                            size: Size {
+                                width: size.width,
+                                height: size.height,
+                            },
+                            ..Default::default()
+                        })
                     }
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                     _ => (),
                 },
                 Event::RedrawRequested(_) => {
-                    gl.draw();
                     windowed_context.swap_buffers().unwrap();
                 }
                 _ => (),

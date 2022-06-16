@@ -1,11 +1,8 @@
 //! Wrappers around OpenGL's memory management API.
 
-mod classicbuf;
-mod classicvao;
 mod gpudata;
 mod layout;
+pub mod stateful;
 
-pub use classicbuf::ClassicBuffer;
-pub use classicvao::ClassicVao;
-pub use gpudata::GpuData;
+pub use gpudata::{GpuData, GpuDataIndices, GpuDataVerts};
 pub use layout::Layout;

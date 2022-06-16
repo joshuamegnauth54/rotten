@@ -1,6 +1,6 @@
 use super::{Shader, ShaderDescriptor};
 use crate::{
-    gl_support::{
+    context::{
         gl::{
             self,
             types::{GLint, GLuint},

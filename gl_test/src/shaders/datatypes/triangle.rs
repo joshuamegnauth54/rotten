@@ -1,6 +1,25 @@
 use super::Vertex3;
-use crate::memory::{GpuData, Layout};
+use crate::memory::{GpuData, GpuDataIndices, GpuDataVerts, Layout};
 use std::mem::size_of;
+
+/// Indices for element array buffer
+#[derive(Debug, Clone, Copy)]
+#[repr(C, packed)]
+pub struct TriangleIndices {
+    indices: [u32; 3],
+}
+
+impl GpuData for TriangleIndices {
+    type Data = [u32; 3];
+
+    fn as_ptr(&self) -> *const Self::Data {
+        std::ptr::addr_of!(self.indices)
+    }
+
+    fn size_total(&self) -> usize {
+        size_of::<Self::Data>()
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
@@ -14,19 +33,21 @@ impl Triangle {
     }
 }
 
-impl GpuData<2> for Triangle {
-    type Data = Vertex3;
+impl GpuData for Triangle {
+    type Data = [Vertex3; 3];
 
     fn as_ptr(&self) -> *const Self::Data {
-        self.vertices.as_ptr()
-    }
-
-    fn stride(&self) -> usize {
-        self.vertices[0].stride()
+        self.vertices.as_ptr() as _
     }
 
     fn size_total(&self) -> usize {
         size_of::<Vertex3>() * 3
+    }
+}
+
+impl GpuDataVerts<2> for Triangle {
+    fn stride(&self) -> usize {
+        self.vertices[0].stride()
     }
 
     fn memory_layout(&self) -> [Layout; 2] {
@@ -46,6 +67,12 @@ impl GpuData<2> for Triangle {
                 start: Vertex3::size_position(),
             },
         ]
+    }
+}
+
+impl GpuDataIndices<TriangleIndices, 2> for Triangle {
+    fn indices(&self) -> TriangleIndices {
+        TriangleIndices { indices: [0, 1, 2] }
     }
 }
 
